@@ -2,6 +2,20 @@ import math
 import random
 
 
+positive_frame = 1
+negative_frame = 0
+
+
+def set_positive_frame(v):
+    global positive_frame
+    global negative_frame
+    positive_frame = v
+    if positive_frame == 1:
+        negative_frame = 0
+    else:
+        negative_frame = 1
+
+
 def frame_to_quadtree(frame):
     s_y, s_x = len(frame), len(frame[0])
     assert s_y != 0
@@ -14,7 +28,7 @@ def frame_to_quadtree(frame):
 def empty(frame):
     for row in frame:
         for val in row:
-            if val != 0:
+            if val == positive_frame:
                 return False
     return True
 
@@ -23,9 +37,9 @@ def _recursive_convert(frame):
     s_y, s_x = len(frame), len(frame[0])
     assert s_y == s_x
     if empty(frame):
-        return 0
+        return negative_frame
     elif s_x == 1 or s_y == 1:
-        return 1
+        return positive_frame
     else:
         return [_recursive_convert(get_sub_frame(frame, i)) for i in range(4)]
 
@@ -64,19 +78,19 @@ def pad_frame(frame):
             closest_pow = 2 ** (math.floor(math.log2(s_y)) + 1)
             cols_adding = closest_pow - s_y
             for _ in range(cols_adding):
-                frame.append([0] * s_x)
+                frame.append([negative_frame] * s_x)
             s_y += cols_adding
         for row in frame:
-            row.extend([0] * (s_y - s_x))
+            row.extend([negative_frame] * (s_y - s_x))
     elif s_x > s_y:
         if not (s_x & (s_x - 1) == 0):
             closest_pow = 2 ** (math.floor(math.log2(s_x)) + 1)
             rows_adding = closest_pow - s_x
             for row in frame:
-                row.extend([0] * rows_adding)
+                row.extend([negative_frame] * rows_adding)
             s_x += rows_adding
         for _ in range(s_x - s_y):
-            frame.append([0] * s_x)
+            frame.append([negative_frame] * s_x)
 
 
 def reconstruct_quadtree(tree):
@@ -85,14 +99,16 @@ def reconstruct_quadtree(tree):
 
 def _recursive_reconstruct(tree, depth):
     if depth == 1:
-        if tree == 0:
-            return [[0, 0], [0, 0]]
+        if tree == negative_frame:
+            return [[negative_frame, negative_frame],
+                    [negative_frame, negative_frame]]
         return [
                 [tree[1], tree[0]],
                 [tree[2], tree[3]]
                 ]
-    elif tree == 0:
-        return [[0 for _ in range(2**depth)] for _ in range(2**depth)]
+    elif tree == negative_frame:
+        return [[negative_frame for _ in range(2**depth)]
+                for _ in range(2**depth)]
 
     rr = lambda x: _recursive_reconstruct(x, depth-1)
     
@@ -137,20 +153,20 @@ def random_matrix(max_size, avoid_empty=True, random_bias=0.5):
 def flatten(tree):
     tree, depth = tree
     flattened = _flatten(tree, depth)
-    if flattened == [0]:
-        return [0]
+    if flattened == [negative_frame]:
+        return [negative_frame]
     return flattened
 
 
 def _flatten(tree, depth):
     if depth == 1:
         return tree
-    if tree == 0:
-        return [0]
+    if tree == negative_frame:
+        return [negative_frame]
     b = [1 if i != 0 else 0 for i in tree]
     f = []
     for i in tree:
-        if i != 0:
+        if i != negative_frame:
             f.extend(_flatten(i, depth-1))
     return b + f
 
@@ -166,25 +182,28 @@ def _unflatten(stack, depth):
     instr = stack.pop(0)
     t = []
     for i in instr:
-        if i == 0:
-            t.append(0)
+        if i == negative_frame:
+            t.append(negative_frame)
         elif depth > 1:
             t.append(_unflatten(stack, depth-1))
         else:
-            t.append(1)
+            t.append(positive_frame)
     return t
 
 
 if __name__ == "__main__":
     # fuzzing/perf test tree gen
-    n_fuzzes = 100
-    max_size = 100
+    n_fuzzes = 1
+    max_size = 4
     comp_ratios = []
     for i in range(n_fuzzes):
         frame = random_matrix(max_size, random_bias=0.70)
         data = (len(frame) ** 2) / 8
+        print(frame)
         tree, depth = frame_to_quadtree(frame)
+        print(tree)
         flattened = flatten((tree, depth))
+        print(flattened)
         comp = len(flattened) / 8
         unflattened = unflatten(flattened, depth)
         compare_trees(frame, reconstruct_quadtree((unflattened, depth)))
